@@ -1,0 +1,7 @@
+{
+  "features": {
+    "checkout_v2": true,
+    "dark_mode": false
+  },
+  "max_items": 50
+}

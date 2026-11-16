@@ -1,0 +1,10 @@
+{
+  "$comment": "Schema of the e2e test bin (HOTCFG_E2E_BIN). Set it on the bin in the dashboard.",
+  "type": "object",
+  "required": ["features", "max_items"],
+  "additionalProperties": false,
+  "properties": {
+    "features": { "type": "object", "additionalProperties": { "type": "boolean" } },
+    "max_items": { "type": "integer", "minimum": 1 }
+  }
+}

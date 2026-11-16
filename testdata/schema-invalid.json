@@ -1,0 +1,6 @@
+{
+  "features": {
+    "checkout_v2": "yes"
+  },
+  "max_items": "fifty"
+}

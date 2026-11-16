@@ -1,0 +1,183 @@
+# Self-test: runs the action from this checkout (uses: ./) on Linux and
+# macOS, x64 and arm64.
+#
+# - keyless: installs the CLI, runs the commands that need no key, and checks
+#   that bad input fails. Runs on every push and pull request.
+# - e2e: validates against a real bin's schema and pushes to it. Runs only on
+#   pushes to main of this repository (never for pull requests or forks), with
+#   the secret HOTCFG_E2E_API_KEY, a key limited to one test bin and to
+#   development, and the repository variable HOTCFG_E2E_BIN, that bin's id (a
+#   bare id like action-self-test is looked up in the key's organization).
+name: Test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  keyless:
+    name: keyless (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Validate a valid file
+        id: valid
+        uses: ./
+        with:
+          command: validate
+          file: testdata/valid.json
+
+      - name: The CLI is installed and on the PATH
+        env:
+          CLI_VERSION: ${{ steps.valid.outputs.cli-version }}
+        run: |
+          set -euo pipefail
+          test -n "$CLI_VERSION"
+          hotcfg version | grep -qx "hotcfg ${CLI_VERSION#v}"
+          hotcfg validate --help | grep -q -- "--bin"
+
+      - name: Validate a file with a syntax error (must fail)
+        id: invalid
+        continue-on-error: true
+        uses: ./
+        with:
+          file: testdata/invalid.json
+
+      - name: Validate a file with two JSON values (must fail)
+        id: two
+        continue-on-error: true
+        uses: ./
+        with:
+          file: testdata/two-values.json
+
+      - name: Validate against a bin without an API key (must fail)
+        id: bin-nokey
+        continue-on-error: true
+        uses: ./
+        with:
+          file: testdata/valid.json
+          bin: self-test
+
+      - name: Push without an API key (must fail before calling the API)
+        id: nokey
+        continue-on-error: true
+        uses: ./
+        with:
+          command: push
+          file: testdata/valid.json
+          bin: self-test
+          environment: development
+
+      - name: Push without an environment (must fail)
+        id: noenv
+        continue-on-error: true
+        uses: ./
+        with:
+          command: push
+          api-key: sk_test_not_a_real_key
+          file: testdata/valid.json
+          bin: self-test
+
+      - name: A CLI older than the action supports (must fail)
+        id: old-cli
+        continue-on-error: true
+        uses: ./
+        with:
+          command: install
+          version: v0.1.3
+
+      - name: Unknown command (must fail)
+        id: unknown
+        continue-on-error: true
+        uses: ./
+        with:
+          command: deploy
+
+      - name: The failing cases failed
+        env:
+          INVALID: ${{ steps.invalid.outcome }}
+          TWO: ${{ steps.two.outcome }}
+          BIN_NOKEY: ${{ steps.bin-nokey.outcome }}
+          NOKEY: ${{ steps.nokey.outcome }}
+          NOENV: ${{ steps.noenv.outcome }}
+          OLD_CLI: ${{ steps.old-cli.outcome }}
+          UNKNOWN: ${{ steps.unknown.outcome }}
+        run: |
+          set -euo pipefail
+          status=0
+          for pair in "invalid:$INVALID" "two-values:$TWO" "bin-no-key:$BIN_NOKEY" "no-key:$NOKEY" \
+            "no-env:$NOENV" "old-cli:$OLD_CLI" "unknown:$UNKNOWN"; do
+            if [ "${pair#*:}" != failure ]; then
+              echo "::error::case ${pair%%:*} should have failed, outcome: ${pair#*:}"
+              status=1
+            fi
+          done
+          exit "$status"
+
+  e2e:
+    name: e2e (real API)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'hotcfg/action'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: e2e
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Validate against the bin's schema
+        uses: ./
+        with:
+          file: testdata/valid.json
+          bin: ${{ vars.HOTCFG_E2E_BIN }}
+          api-key: ${{ secrets.HOTCFG_E2E_API_KEY }}
+
+      - name: A file the schema refuses (must fail)
+        id: refused
+        continue-on-error: true
+        uses: ./
+        with:
+          file: testdata/schema-invalid.json
+          bin: ${{ vars.HOTCFG_E2E_BIN }}
+          api-key: ${{ secrets.HOTCFG_E2E_API_KEY }}
+
+      - name: Push to development, twice
+        id: push1
+        uses: ./
+        with:
+          command: push
+          file: testdata/valid.json
+          bin: ${{ vars.HOTCFG_E2E_BIN }}
+          environment: development
+          api-key: ${{ secrets.HOTCFG_E2E_API_KEY }}
+
+      - id: push2
+        uses: ./
+        with:
+          command: push
+          file: testdata/valid.json
+          bin: ${{ vars.HOTCFG_E2E_BIN }}
+          environment: development
+          api-key: ${{ secrets.HOTCFG_E2E_API_KEY }}
+
+      - name: The outputs are right
+        env:
+          REFUSED: ${{ steps.refused.outcome }}
+          V1: ${{ steps.push1.outputs.version }}
+          V2: ${{ steps.push2.outputs.version }}
+          HASH: ${{ steps.push2.outputs.hash }}
+        run: |
+          set -euo pipefail
+          test "$REFUSED" = failure
+          [[ "$V1" =~ ^[0-9]+$ && "$V2" =~ ^[0-9]+$ ]]
+          test "$V2" -gt "$V1"
+          test -n "$HASH"

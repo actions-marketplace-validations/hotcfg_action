@@ -1,0 +1,96 @@
+name: hotcfg
+description: Check JSON config against its schema in CI, then push it to hotcfg.run or promote it between environments.
+author: hotcfg
+branding:
+  icon: sliders
+  color: orange
+
+inputs:
+  command:
+    description: >-
+      What to run: `validate` (check the file; with `bin` and `api-key`, also
+      against the bin's JSON Schema), `push` (upload the file as the bin's next
+      version), `promote` (copy the latest version of one environment to
+      another) or `install` (only put `hotcfg` on the PATH for your own steps).
+    required: false
+    default: validate
+  api-key:
+    description: >-
+      Secret API key (`sk_live_…`), passed to the CLI as HOTCFG_API_KEY. Needed
+      for `push`, `promote`, and `validate` with `bin`. Always pass it from a
+      secret, e.g. `secrets.HOTCFG_API_KEY`.
+    required: false
+    default: ""
+  bin:
+    description: >-
+      The bin, as an id or `org-slug/id`. Needed for `push` and `promote`; with
+      `validate`, the file is also checked against this bin's schema.
+    required: false
+    default: ""
+  file:
+    description: Path to the JSON file. Needed for `validate` and `push`.
+    required: false
+    default: ""
+  environment:
+    description: >-
+      `push`: the environment to write to. `promote`: the target environment.
+      One of `development`, `staging` or `production`. Needed for both: the
+      action never falls back to production on its own.
+    required: false
+    default: ""
+  from-environment:
+    description: "`promote` only: the source environment, e.g. `staging`."
+    required: false
+    default: ""
+  version:
+    description: The hotcfg CLI release to install, e.g. `v0.2.0`, or `latest`. At least v0.2.0.
+    required: false
+    default: latest
+  api-url:
+    description: API base URL. Leave empty for https://api.hotcfg.run.
+    required: false
+    default: ""
+  extra-args:
+    description: >-
+      More CLI flags, split on whitespace (quotes are not interpreted). Appended
+      after the action's own arguments.
+    required: false
+    default: ""
+
+outputs:
+  cli-version:
+    description: The hotcfg CLI version that was installed, e.g. `v0.2.0`.
+    value: ${{ steps.install.outputs.cli-version }}
+  version:
+    description: "`push` / `promote`: the bin version just created in the target environment, as a number (e.g. `4`)."
+    value: ${{ steps.run.outputs.version }}
+  hash:
+    description: "`push` / `promote`: the content hash of that version."
+    value: ${{ steps.run.outputs.hash }}
+  promoted-from-version:
+    description: "`promote` only: the source environment's version that was copied."
+    value: ${{ steps.run.outputs.promoted-from-version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install hotcfg CLI
+      id: install
+      shell: bash
+      env:
+        HOTCFG_CLI_VERSION: ${{ inputs.version }}
+      run: bash "$GITHUB_ACTION_PATH/scripts/install.sh"
+
+    - name: Run hotcfg
+      id: run
+      shell: bash
+      env:
+        HOTCFG_API_KEY: ${{ inputs.api-key }}
+        HOTCFG_API_URL: ${{ inputs.api-url }}
+        INPUT_COMMAND: ${{ inputs.command }}
+        INPUT_BIN: ${{ inputs.bin }}
+        INPUT_FILE: ${{ inputs.file }}
+        INPUT_ENVIRONMENT: ${{ inputs.environment }}
+        INPUT_FROM_ENVIRONMENT: ${{ inputs.from-environment }}
+        INPUT_EXTRA_ARGS: ${{ inputs.extra-args }}
+      run: bash "$GITHUB_ACTION_PATH/scripts/run.sh"
