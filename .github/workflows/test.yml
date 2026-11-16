@@ -43,8 +43,12 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$CLI_VERSION"
-          hotcfg version | grep -qx "hotcfg ${CLI_VERSION#v}"
-          hotcfg validate --help | grep -q -- "--bin"
+          # Capture, then match: "cmd | grep -q" can kill cmd with SIGPIPE
+          # when grep exits early, which pipefail turns into a failure.
+          version="$(hotcfg version)"
+          test "$version" = "hotcfg ${CLI_VERSION#v}"
+          help="$(hotcfg validate --help)"
+          grep -q -- "--bin" <<< "$help"
 
       - name: Validate a file with a syntax error (must fail)
         id: invalid
