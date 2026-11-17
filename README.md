@@ -251,7 +251,7 @@ A public bin needs no key. For a private bin, pass a publishable key (`pk_live_â
     HOTCFG_API_KEY: ${{ secrets.HOTCFG_READ_KEY }}
 ```
 
-The CLI then reads the bin the way your app does, so a publish from the last 30 seconds may not be in it yet. Use a secret key instead if the build must have the very latest version. Reading with a publishable key needs CLI v0.4.1 or later, which `version: latest` (the default) installs.
+The CLI then reads the bin the way your app does, so a publish usually shows within seconds, but one from the last 30 seconds may not be in it yet. Use a secret key instead if the build must have the very latest version. Reading with a publishable key needs CLI v0.4.1 or later, which `version: latest` (the default) installs.
 
 ## Security
 
