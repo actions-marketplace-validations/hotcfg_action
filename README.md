@@ -243,6 +243,16 @@ Bundle production config into an app build as offline defaults:
 - run: hotcfg get acme/mobile-flags --env production > app/src/main/assets/flags.json
 ```
 
+A public bin needs no key. For a private bin, pass a publishable key (`pk_live_…`) limited to that bin and `production`, and name the bin with its organization, as above:
+
+```yaml
+- run: hotcfg get acme/mobile-flags --env production > app/src/main/assets/flags.json
+  env:
+    HOTCFG_API_KEY: ${{ secrets.HOTCFG_READ_KEY }}
+```
+
+The CLI then reads the bin the way your app does, so a publish from the last 30 seconds may not be in it yet. Use a secret key instead if the build must have the very latest version. Reading with a publishable key needs CLI v0.4.1 or later, which `version: latest` (the default) installs.
+
 ## Security
 
 - The API key reaches the CLI only through the `HOTCFG_API_KEY` environment variable. No input is put into a shell command directly, so input values can't inject commands.
